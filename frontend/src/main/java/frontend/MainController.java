@@ -1,3 +1,10 @@
+package frontend;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.InputStream;
+import java.util.List;
+
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 
@@ -21,7 +28,6 @@ public class MainController {
         String oid = oidField.getText().trim();
         String op = operationBox.getValue();
 
-        // 🔴 Kiểm tra đầu vào trống
         if (ip.isEmpty() || oid.isEmpty() || op == null || op.isEmpty()) {
             Alert alert = new Alert(Alert.AlertType.WARNING);
             alert.setTitle("Thiếu thông tin");
@@ -31,14 +37,16 @@ public class MainController {
             return;
         }
 
-        System.out.println("Đã nhấn nút Go!");
-        System.out.println("IP: " + ip + ", OID: " + oid + ", Operation: " + op);
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            InputStream input = getClass().getResourceAsStream("/data.json");
 
-        // Dữ liệu test
-        SNMPData testData = new SNMPData(
-                oid, "Sample Value", "OctetString", ip + ":161"
-        );
-        snmpTable.getItems().add(testData);
+            List<SNMPData> dataList = mapper.readValue(input, new TypeReference<List<SNMPData>>() {});
+            snmpTable.getItems().clear();
+            snmpTable.getItems().addAll(dataList);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @FXML

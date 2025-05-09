@@ -1,0 +1,14 @@
+[
+  {
+    "oid": "1.3.6.1.2.1.1.1.0",
+    "value": "Linux test system",
+    "type": "OctetString",
+    "ipPort": "192.168.1.1:161"
+  },
+  {
+    "oid": "1.3.6.1.2.1.1.3.0",
+    "value": "12345678",
+    "type": "TimeTicks",
+    "ipPort": "192.168.1.1:161"
+  }
+]

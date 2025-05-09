@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<BorderPane xmlns="http://javafx.com/javafx/8.0.171"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="MainController">
+
+    <!-- Thanh nhập địa chỉ IP + OID + nút Go -->
+    <top>
+        <HBox spacing="10" alignment="CENTER_LEFT">
+            <padding>
+                <Insets top="10" right="10" bottom="10" left="10"/>
+            </padding>
+
+            <TextField fx:id="ipField" promptText="IP address" />
+            <ComboBox fx:id="operationBox" promptText="Operation (GET, GETNEXT...)"/>
+            <TextField fx:id="oidField" promptText="OID" />
+            <Button text="Go" onAction="#onGoClicked"/>
+        </HBox>
+    </top>
+
+    <!-- Cây MIB bên trái -->
+    <left>
+        <TreeView fx:id="mibTree" prefWidth="220" />
+    </left>
+
+    <!-- Bảng kết quả ở giữa -->
+    <center>
+        <TableView fx:id="snmpTable">
+            <columns>
+                <TableColumn fx:id="oidCol" text="Name/OID" prefWidth="200"/>
+                <TableColumn fx:id="valueCol" text="Value" prefWidth="200"/>
+                <TableColumn fx:id="typeCol" text="Type" prefWidth="120"/>
+                <TableColumn fx:id="ipPortCol" text="IP:Port" prefWidth="120"/>
+            </columns>
+        </TableView>
+    </center>
+
+</BorderPane>

@@ -1,4 +1,3 @@
-// DataManager.java
 package org.example;
 
 import org.snmp4j.smi.VariableBinding;

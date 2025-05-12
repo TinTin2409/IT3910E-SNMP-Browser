@@ -4,7 +4,6 @@ package org.example;
 import java.io.*;
 import java.util.*;
 import java.util.prefs.Preferences;
-import org.example.UIHelper;
 
 public class SNMPConfigurationManager {
     private Properties appConfig;

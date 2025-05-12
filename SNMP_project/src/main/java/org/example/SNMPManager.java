@@ -1,15 +1,10 @@
-// SNMPManager.java
 package org.example;
 
-import org.snmp4j.smi.VariableBinding;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
-import org.example.UIHelper;
-import org.example.Node;
 import java.util.ArrayList;
 import java.util.Map;
-import org.example.SNMPCreateTree;
 
 public class SNMPManager {
     private final MIBManager mibManager;
@@ -18,6 +13,7 @@ public class SNMPManager {
     private final SNMPConfigurationManager configManager;
     private SNMPCreateTree oidTreeBuilder = new SNMPCreateTree();
     private Node oidTreeRoot = null;
+    private File lastMibDirectory = null;
 
     public SNMPManager() {
         this.configManager = new SNMPConfigurationManager();
@@ -48,10 +44,12 @@ public class SNMPManager {
     }
 
     public void importMibFile() {
-        File selectedFile = UIHelper.chooseMibFile();
+        File selectedFile = UIHelper.chooseMibFile(lastMibDirectory);
         if (selectedFile != null) {
             try {
                 mibManager.importMibFile(selectedFile);
+                lastMibDirectory = selectedFile.getParentFile();
+                loadMibFiles();
                 UIHelper.showInfo("Import Successful", "MIB file imported successfully.");
             } catch (IOException e) {
                 UIHelper.showError("Import Failed", e.getMessage());
@@ -63,6 +61,8 @@ public class SNMPManager {
         String directory = UIHelper.chooseDirectory();
         if (directory != null) {
             mibManager.setMibDirectory(directory);
+            lastMibDirectory = new File(directory);
+            loadMibFiles();
         }
     }
 
@@ -146,5 +146,9 @@ public class SNMPManager {
         }
         if (current == null) return new ArrayList<>();
         return new ArrayList<>(current.children.values());
+    }
+
+    public Map<String, List<String>> getPredefinedRootOids() {
+        return mibManager.getPredefinedRootOids();
     }
 }

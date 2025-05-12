@@ -2,13 +2,13 @@ package org.example;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
 public class SNMPCreateTree {
     private final Node root = new Node("root", "", "", "", "", "", "", null); // Root node of the tree
+
     public void buildTreeFromJson(String jsonFilePath) throws IOException {
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode jsonNode = objectMapper.readTree(new File(jsonFilePath));
@@ -38,11 +38,13 @@ public class SNMPCreateTree {
             addNode(name, oid, nodeType, type, access, status, description, constraints);
         }
     }
+
     public void buildTreeFromMultipleMIBs(List<String> mibFilePaths) throws IOException {
         for (String mibFilePath : mibFilePaths) {
             buildTreeFromJson(mibFilePath);
         }
     }
+
     private void addNode(String name, String oid, String nodeType, String type, String access, String status, String description, Map<String, Object> constraints) {
         if (oid != null && name != null) {
             String[] parts = oid.split("\\.");

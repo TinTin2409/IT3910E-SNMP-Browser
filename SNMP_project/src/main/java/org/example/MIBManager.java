@@ -1,4 +1,3 @@
-// MibManager.java
 package org.example;
 
 import java.io.File;
@@ -6,6 +5,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +33,7 @@ public class MIBManager {
     public void importMibFile(File selectedFile) throws IOException {
         Path source = selectedFile.toPath();
         Path target = Paths.get(currentMibDirectory, selectedFile.getName());
-        Files.copy(source, target);
+        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
         loadMibFiles();
     }
 
@@ -74,5 +74,9 @@ public class MIBManager {
         }
 
         return results;
+    }
+
+    public Map<String, List<String>> getPredefinedRootOids() {
+        return mibLoader.getPredefinedRootOids();
     }
 }

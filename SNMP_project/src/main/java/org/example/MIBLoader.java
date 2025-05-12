@@ -59,13 +59,21 @@ public class MIBLoader {
         File folder = new File(folderPath);
         File[] files = folder.listFiles();
 
+        mibFilesByRootOid.clear(); // Clear previous loaded MIBs
+
         if (files != null) {
             for (File file : files) {
                 if (file.isFile() && file.getName().endsWith(".json")) {
                     try {
-                        //System.out.println("Loading file: " + file.getName());
                         JsonNode fileNode = objectMapper.readTree(file);
-                        String rootOid = getRootOidFromFile(file.getName());
+                        // Try to get the root OID from the top-level 'oid' field
+                        String rootOid = null;
+                        if (fileNode.has("oid")) {
+                            rootOid = fileNode.get("oid").asText();
+                        } else {
+                            // Fallback: try to find the first 'oid' field in the file
+                            rootOid = findFirstOid(fileNode);
+                        }
                         if (rootOid != null) {
                             if (!mibFilesByRootOid.containsKey(rootOid)) {
                                 mibFilesByRootOid.put(rootOid, new ArrayList<>());
@@ -157,6 +165,25 @@ public class MIBLoader {
     // Add this method inside the MIBLoader class, at the end before the last closing brace
     public Map<String, List<String>> getPredefinedRootOids() {
         return Collections.unmodifiableMap(predefinedRootOids);
+    }
+    // Helper to recursively find the first 'oid' field in a JsonNode
+    private String findFirstOid(JsonNode node) {
+        if (node == null) return null;
+        if (node.has("oid")) return node.get("oid").asText();
+        if (node.isObject()) {
+            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                String found = findFirstOid(field.getValue());
+                if (found != null) return found;
+            }
+        } else if (node.isArray()) {
+            for (JsonNode value : node) {
+                String found = findFirstOid(value);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 }
 

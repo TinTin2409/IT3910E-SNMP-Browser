@@ -1,19 +1,10 @@
 package org.example;
 
 import javax.swing.*;
-import javax.swing.border.TitledBorder;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.io.File;
-import java.io.IOException;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Vector;
+
 
 public class SNMPBrowserUI extends JFrame {
     // Main components
@@ -102,7 +93,7 @@ public class SNMPBrowserUI extends JFrame {
         connectionPanel.add(ipAddressField);
         connectionPanel.add(new JLabel("Port:"));
         connectionPanel.add(portField);
-        connectionPanel.add(new JLabel("Community:"));
+        connectionPanel.add(new JLabel("Community String:"));
         connectionPanel.add(communityField);
 
         JPanel oidPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -123,13 +114,15 @@ public class SNMPBrowserUI extends JFrame {
 
         // Create buttons
         JPanel buttonPanel = new JPanel();
-        JButton getButton = new JButton("Get");
+        JButton getButton = new JButton("Scalar Get");
         JButton getNextButton = new JButton("Get Next");
         JButton walkButton = new JButton("Walk");
+        JButton smartQueryButton = new JButton("Tabular Get");
 
         buttonPanel.add(getButton);
         buttonPanel.add(getNextButton);
         buttonPanel.add(walkButton);
+        buttonPanel.add(smartQueryButton);
 
         gbc.gridy = 3;
         formPanel.add(buttonPanel, gbc);
@@ -146,6 +139,7 @@ public class SNMPBrowserUI extends JFrame {
         getButton.addActionListener(e -> performGet());
         getNextButton.addActionListener(e -> performGetNext());
         walkButton.addActionListener(e -> performWalk());
+        smartQueryButton.addActionListener(e -> performSmartQuery());
         recentTargetsCombo.addActionListener(e -> handleRecentTargetSelection());
 
         panel.add(formPanel, BorderLayout.NORTH);
@@ -163,6 +157,9 @@ public class SNMPBrowserUI extends JFrame {
         JTextField searchField = new JTextField(20);
         JButton searchButton = new JButton("Search");
 
+        // Add ActionListener to searchField to handle Enter key
+        searchField.addActionListener(e -> searchMibs(searchField.getText()));
+
         JPanel searchInputPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         searchInputPanel.add(new JLabel("Search:"));
         searchInputPanel.add(searchField);
@@ -172,6 +169,15 @@ public class SNMPBrowserUI extends JFrame {
         backButton = new JButton("Back");
         backButton.setEnabled(false);
         searchInputPanel.add(backButton);
+
+        // Add Refresh MIBs button
+        JButton refreshMibsButton = new JButton("Refresh MIBs");
+        searchInputPanel.add(refreshMibsButton);
+        refreshMibsButton.addActionListener(e -> {
+            snmpManager.loadMibFiles();
+            loadMibsIntoList();
+            statusLabel.setText("MIBs refreshed");
+        });
 
         searchPanel.add(searchInputPanel, BorderLayout.NORTH);
 
@@ -295,6 +301,17 @@ public class SNMPBrowserUI extends JFrame {
         panel.add(tableScroll, BorderLayout.CENTER);
         panel.add(buttonPanel, BorderLayout.SOUTH);
 
+        queryTable.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    int row = queryTable.rowAtPoint(evt.getPoint());
+                    if (row >= 0) {
+                        showRowDetailsDialog(row);
+                    }
+                }
+            }
+        });
+
         return panel;
     }
 
@@ -302,22 +319,13 @@ public class SNMPBrowserUI extends JFrame {
         JToolBar toolBar = new JToolBar();
         toolBar.setFloatable(false);
 
-        JButton refreshButton = new JButton("Refresh MIBs");
         JButton aboutButton = new JButton("About");
 
-        toolBar.add(refreshButton);
-        toolBar.addSeparator(new Dimension(20, 10));
         toolBar.add(aboutButton);
-
-        refreshButton.addActionListener(e -> {
-            snmpManager.loadMibFiles();
-            loadMibsIntoList();
-            statusLabel.setText("MIBs refreshed");
-        });
 
         aboutButton.addActionListener(e -> JOptionPane.showMessageDialog(
                 this,
-                "SNMP Browser v1.0\nDeveloped by Your Team",
+                "SNMP Browser v1.0\nDeveloped by TinTin",
                 "About SNMP Browser",
                 JOptionPane.INFORMATION_MESSAGE
         ));
@@ -462,10 +470,25 @@ public class SNMPBrowserUI extends JFrame {
         if (parts.length < 2) return;
 
         String resultOid = parts[0];
-        String value = parts[1];
+        String value = parts[1].trim();
+
+        // Filter out SNMP errors
+        if (value.equalsIgnoreCase("noSuchInstance") || value.equalsIgnoreCase("noSuchObject")) {
+            // Optionally, show a message or skip adding to the table
+            // JOptionPane.showMessageDialog(this, "OID " + resultOid + " is not a valid instance or object.", "SNMP Error", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
 
         // Get node information if available
         Node node = snmpManager.lookupNode(resultOid);
+        if (node == null) {
+            // Try to get the base OID (for tabular data)
+            int lastDot = resultOid.lastIndexOf('.');
+            if (lastDot > 0) {
+                String baseOid = resultOid.substring(0, lastDot);
+                node = snmpManager.lookupNode(baseOid);
+            }
+        }
         String type = (node != null) ? node.type : "";
         String description = (node != null) ? node.description : "";
 
@@ -491,14 +514,35 @@ public class SNMPBrowserUI extends JFrame {
         setInProgress("Searching MIBs...");
 
         mibsListModel.clear();
-        List<String> searchResults = snmpManager.searchMibNodes(searchTerm);
 
-        for (String result : searchResults) {
-            mibsListModel.addElement(result);
+        if (searchTerm == null || searchTerm.trim().isEmpty()) {
+            // If search is empty, show all predefined root OIDs and their MIB files
+            java.util.Map<String, java.util.List<String>> rootOids = snmpManager.getPredefinedRootOids();
+            for (java.util.Map.Entry<String, java.util.List<String>> entry : rootOids.entrySet()) {
+                String rootOid = entry.getKey();
+                java.util.List<String> mibFiles = entry.getValue();
+                for (String mibFile : mibFiles) {
+                    mibsListModel.addElement(rootOid + " (" + mibFile + ")");
+                }
+            }
+            setCompleted("Showing all predefined root OIDs");
+            return;
         }
 
-        setCompleted("Search completed - " + searchResults.size() + " results");
+        // Otherwise, filter only among the children of the current node
+        List<org.example.Node> children = snmpManager.getChildrenOfOid(currentOidPath);
+        int count = 0;
+        for (org.example.Node child : children) {
+            if ((child.oid != null && child.oid.contains(searchTerm)) ||
+                (child.name != null && child.name.toLowerCase().contains(searchTerm.toLowerCase()))) {
+                mibsListModel.addElement(child.oid + (child.name != null ? " (" + child.name + ")" : ""));
+                count++;
+            }
+        }
+
+        setCompleted("Search completed - " + count + " results");
     }
+
 
     private void displayNodeDetails(String selectedNode, JTextArea detailArea) {
         // Extract OID from selection (assuming format "OID (MIB_NAME)" or just "OID")
@@ -526,12 +570,16 @@ public class SNMPBrowserUI extends JFrame {
 
     private void importMib() {
         snmpManager.importMibFile();
-        loadMibsIntoList();
+        // Refresh the list for the current node
+        List<org.example.Node> children = snmpManager.getChildrenOfOid(currentOidPath);
+        updateMibsListWithChildren(children);
     }
 
     private void setMibDirectory() {
         snmpManager.setMibDirectory();
-        loadMibsIntoList();
+        // Refresh the list for the current node
+        List<org.example.Node> children = snmpManager.getChildrenOfOid(currentOidPath);
+        updateMibsListWithChildren(children);
     }
 
     private void querySelectedNode() {
@@ -573,6 +621,65 @@ public class SNMPBrowserUI extends JFrame {
         statusLabel.setText(message);
         operationProgress.setVisible(false);
         operationProgress.setIndeterminate(false);
+    }
+
+    private void performSmartQuery() {
+        try {
+            String ipAddress = ipAddressField.getText();
+            int port = Integer.parseInt(portField.getText());
+            String community = communityField.getText();
+            String oid = oidField.getText();
+
+            setInProgress("Performing Smart Query...");
+
+            // Heuristic: if OID ends with .0, treat as scalar, else treat as table
+            if (oid.trim().endsWith(".0")) {
+                String result = snmpManager.get(ipAddress, port, community, oid);
+                resultArea.append(result + "\n");
+                addResultToTable(oid, result);
+            } else {
+                List<String> results = snmpManager.walk(ipAddress, port, community, oid);
+                for (String result : results) {
+                    resultArea.append(result + "\n");
+                    addResultToTable(oid, result);
+                }
+            }
+
+            setCompleted("Smart Query completed");
+        } catch (NumberFormatException e) {
+            UIHelper.showError("Error", "Invalid port number");
+            setCompleted("Error: Invalid port number");
+        } catch (Exception e) {
+            UIHelper.showError("Error", e.getMessage());
+            setCompleted("Error: " + e.getMessage());
+        }
+    }
+
+    private void showRowDetailsDialog(int row) {
+        String oid = tableModel.getValueAt(row, 0) != null ? tableModel.getValueAt(row, 0).toString() : "";
+        String value = tableModel.getValueAt(row, 1) != null ? tableModel.getValueAt(row, 1).toString() : "";
+        String type = tableModel.getValueAt(row, 2) != null ? tableModel.getValueAt(row, 2).toString() : "";
+        String description = tableModel.getValueAt(row, 3) != null ? tableModel.getValueAt(row, 3).toString() : "";
+
+        JTextArea textArea = new JTextArea(
+            "OID: " + oid + "\n\n" +
+            "Value: " + value + "\n\n" +
+            "Type: " + type + "\n\n" +
+            "Description: " + description
+        );
+        textArea.setEditable(false);
+        textArea.setLineWrap(true);
+        textArea.setWrapStyleWord(true);
+
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setPreferredSize(new java.awt.Dimension(600, 200)); // 2 width * 4 height (approx)
+
+        JOptionPane.showMessageDialog(
+            this,
+            scrollPane,
+            "Row Details",
+            JOptionPane.INFORMATION_MESSAGE
+        );
     }
 
     public static void main(String[] args) {

@@ -1,4 +1,3 @@
-// UIHelper.java
 package org.example;
 
 import javax.swing.*;
@@ -14,14 +13,21 @@ public class UIHelper {
         JOptionPane.showMessageDialog(null, message, title, JOptionPane.INFORMATION_MESSAGE);
     }
 
-    public static File chooseMibFile() {
+    public static File chooseMibFile(File initialDirectory) {
         JFileChooser fileChooser = new JFileChooser();
+        if (initialDirectory != null && initialDirectory.exists()) {
+            fileChooser.setCurrentDirectory(initialDirectory);
+        }
         fileChooser.setFileFilter(new FileNameExtensionFilter("MIB Files", "json"));
 
         if (fileChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
             return fileChooser.getSelectedFile();
         }
         return null;
+    }
+
+    public static File chooseMibFile() {
+        return chooseMibFile((File) null);
     }
 
     public static String chooseDirectory() {

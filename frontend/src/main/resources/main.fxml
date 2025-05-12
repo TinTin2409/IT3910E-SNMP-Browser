@@ -12,7 +12,7 @@
     <top>
         <HBox spacing="10" alignment="CENTER_LEFT">
             <padding>
-                <Insets top="10" right="10" bottom="10" left="10"/>
+                <Insets top="10.0" right="10.0" bottom="10.0" left="10.0"/>
             </padding>
 
             <TextField fx:id="ipField" promptText="IP address" />
@@ -22,10 +22,40 @@
         </HBox>
     </top>
 
-    <!-- Cây MIB bên trái -->
+    <!-- MIB Tree + Label mô tả -->
     <left>
-        <TreeView fx:id="mibTree" prefWidth="220" />
+        <VBox spacing="8.0">
+            <padding>
+                <Insets top="10.0" right="10.0" bottom="10.0" left="10.0"/>
+            </padding>
+
+            <TreeView fx:id="mibTree" prefWidth="220" VBox.vgrow="ALWAYS" />
+
+            <GridPane hgap="5.0" vgap="5.0">
+                <Label text="Name:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                <Label fx:id="nameLabel" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                <Label text="OID:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                <Label fx:id="oidInfoLabel" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                <Label text="MIB:" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                <Label fx:id="mibLabel" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                <Label text="Syntax:" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                <Label fx:id="syntaxLabel" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                <Label text="Access:" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                <Label fx:id="accessLabel" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                <Label text="Status:" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                <Label fx:id="statusLabel" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+
+                <Label text="Description:" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
+                <Label fx:id="descLabel" wrapText="true" GridPane.rowIndex="6" GridPane.columnIndex="1"/>
+            </GridPane>
+        </VBox>
     </left>
+
 
     <!-- Bảng kết quả ở giữa -->
     <center>

@@ -39,15 +39,33 @@ public class MainController {
 
         try {
             ObjectMapper mapper = new ObjectMapper();
-            InputStream input = getClass().getResourceAsStream("/data.json");
+            InputStream input;
 
-            List<SNMPData> dataList = mapper.readValue(input, new TypeReference<List<SNMPData>>() {});
-            snmpTable.getItems().clear();
-            snmpTable.getItems().addAll(dataList);
+            switch (op) {
+                case "GET":
+                    input = getClass().getResourceAsStream("/get_sample.json"); // giả lập
+                    break;
+                case "GETNEXT":
+                    input = getClass().getResourceAsStream("/getnext_sample.json");
+                    break;
+                case "WALK":
+                    input = getClass().getResourceAsStream("/walk_sample.json");
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unsupported operation: " + op);
+            }
+
+            loadSnmpResultFromJson(input);
+
         } catch (Exception e) {
             e.printStackTrace();
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Lỗi");
+            alert.setContentText("Không thể thực hiện thao tác " + op);
+            alert.showAndWait();
         }
     }
+
 
     @FXML
     public void initialize() {
@@ -61,6 +79,21 @@ public class MainController {
         operationBox.getItems().addAll("GET", "GETNEXT", "WALK");
 
     }
+    public void loadSnmpResultFromJson(InputStream jsonInput) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            List<SNMPData> dataList = mapper.readValue(jsonInput, new TypeReference<List<SNMPData>>() {});
+            snmpTable.getItems().clear();
+            snmpTable.getItems().addAll(dataList);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Lỗi dữ liệu");
+            alert.setContentText("Không thể tải dữ liệu SNMP từ JSON!");
+            alert.showAndWait();
+        }
+    }
+
 
 
 

@@ -1,42 +1,81 @@
 package org.example;
 
 import javax.swing.*;
+import javax.swing.border.TitledBorder;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.File;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Vector;
 
-public class SNMPBrowserUI {
-    private final JTextField ipAddressField;
-    private final JTextField portField;
-    private final JTextField communityField;
-    private final JTextField oidField;
-    private final JTextArea resultArea;
-    private final SNMPManager snmpManager;
-    private final MibLoader mibLoader;
+public class SNMPBrowserUI extends JFrame {
+    // Main components
+    private JTabbedPane tabbedPane;
+    private JTextField ipAddressField;
+    private JTextField portField;
+    private JTextField communityField;
+    private JTextField oidField;
+    private JTextArea resultArea;
+    private JTable queryTable;
+    private DefaultTableModel tableModel;
+    private JComboBox<String> recentTargetsCombo;
+    private JList<String> mibsList;
+    private DefaultListModel<String> mibsListModel;
+
+    // Status components
+    private JLabel statusLabel;
+    private JProgressBar operationProgress;
+
+    // Core functionality provider
+    private SNMPManager snmpManager;
+
+    // Track the current OID path for navigation
+    private String currentOidPath = "";
+    private JButton backButton;
 
     public SNMPBrowserUI() {
-        // Create the main frame
-        JFrame frame = new JFrame("SNMP Browser");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        super("SNMP Browser");
 
-        // Initialize components
-        ipAddressField = new JTextField("127.0.0.1", 20);
-        portField = new JTextField("161", 20);
-        communityField = new JTextField("public", 20);
-        oidField = new JTextField("1.3.6.1.2.1.1.1.0", 20);
-        resultArea = new JTextArea(10, 40);
-        resultArea.setEditable(false);
-        resultArea.setWrapStyleWord(true);
-        resultArea.setLineWrap(true);
+        // Initialize the manager
+        this.snmpManager = new SNMPManager();
 
-        // Initialize MibLoader
-        this.mibLoader = new MibLoader();
-        try {
-            this.mibLoader.loadMibsFromFolder("mibs");
-        } catch (Exception e) {
-            System.err.println("Warning: Could not load MIBs: " + e.getMessage());
-        }
+        initializeUI();
+        loadInitialData();
+    }
 
-        // Initialize SNMPManager
-        this.snmpManager = new SNMPManager(this.mibLoader);
+    private void initializeUI() {
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(900, 600);
+        setLocationRelativeTo(null);
+
+        // Create main tabbed pane
+        tabbedPane = new JTabbedPane();
+
+        // Create the different tabs
+        tabbedPane.addTab("Quick Query", createQueryPanel());
+        tabbedPane.addTab("MIB Browser", createMIBBrowserPanel());
+        tabbedPane.addTab("Results", createResultsPanel());
+
+        // Add status bar
+        JPanel statusPanel = createStatusPanel();
+
+        // Add to frame
+        getContentPane().setLayout(new BorderLayout());
+        getContentPane().add(createToolBar(), BorderLayout.NORTH);
+        getContentPane().add(tabbedPane, BorderLayout.CENTER);
+        getContentPane().add(statusPanel, BorderLayout.SOUTH);
+    }
+
+    private JPanel createQueryPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         // Create form panel
         JPanel formPanel = new JPanel(new GridBagLayout());
@@ -44,44 +83,292 @@ public class SNMPBrowserUI {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(5, 5, 5, 5);
 
+        // Target selection/configuration
+        recentTargetsCombo = new JComboBox<>();
+        recentTargetsCombo.setEditable(true);
+
+        ipAddressField = new JTextField("127.0.0.1", 20);
+        portField = new JTextField("161", 5);
+        communityField = new JTextField(snmpManager.getDefaultCommunity(), 10);
+        oidField = new JTextField("1.3.6.1.2.1.1.1.0", 30);
+
+        // Layout components
+        JPanel targetPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        targetPanel.add(new JLabel("Recent:"));
+        targetPanel.add(recentTargetsCombo);
+
+        JPanel connectionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        connectionPanel.add(new JLabel("IP:"));
+        connectionPanel.add(ipAddressField);
+        connectionPanel.add(new JLabel("Port:"));
+        connectionPanel.add(portField);
+        connectionPanel.add(new JLabel("Community:"));
+        connectionPanel.add(communityField);
+
+        JPanel oidPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        oidPanel.add(new JLabel("OID:"));
+        oidPanel.add(oidField);
+
         // Add components to form
-        addFormRow(formPanel, "IP Address:", ipAddressField, gbc, 0);
-        addFormRow(formPanel, "Port:", portField, gbc, 1);
-        addFormRow(formPanel, "Community:", communityField, gbc, 2);
-        addFormRow(formPanel, "OID:", oidField, gbc, 3);
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.gridwidth = 2;
+        formPanel.add(targetPanel, gbc);
 
-        // Add Get button
+        gbc.gridy = 1;
+        formPanel.add(connectionPanel, gbc);
+
+        gbc.gridy = 2;
+        formPanel.add(oidPanel, gbc);
+
+        // Create buttons
+        JPanel buttonPanel = new JPanel();
         JButton getButton = new JButton("Get");
-        gbc.gridx = 1;
-        gbc.gridy = 4;
-        formPanel.add(getButton, gbc);
+        JButton getNextButton = new JButton("Get Next");
+        JButton walkButton = new JButton("Walk");
 
-        // Add action listener to the button
+        buttonPanel.add(getButton);
+        buttonPanel.add(getNextButton);
+        buttonPanel.add(walkButton);
+
+        gbc.gridy = 3;
+        formPanel.add(buttonPanel, gbc);
+
+        // Results area
+        resultArea = new JTextArea();
+        resultArea.setEditable(false);
+        resultArea.setWrapStyleWord(true);
+        resultArea.setLineWrap(true);
+        JScrollPane resultScroll = new JScrollPane(resultArea);
+        resultScroll.setBorder(BorderFactory.createTitledBorder("Results"));
+
+        // Add action listeners
         getButton.addActionListener(e -> performGet());
+        getNextButton.addActionListener(e -> performGetNext());
+        walkButton.addActionListener(e -> performWalk());
+        recentTargetsCombo.addActionListener(e -> handleRecentTargetSelection());
 
-        // Create main panel with BorderLayout
-        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        mainPanel.add(formPanel, BorderLayout.NORTH);
-        mainPanel.add(new JScrollPane(resultArea), BorderLayout.CENTER);
+        panel.add(formPanel, BorderLayout.NORTH);
+        panel.add(resultScroll, BorderLayout.CENTER);
 
-        // Add main panel to frame
-        frame.add(mainPanel);
-
-        // Set frame properties
-        frame.pack();
-        frame.setLocationRelativeTo(null);
-        frame.setVisible(true);
+        return panel;
     }
 
-    private void addFormRow(JPanel panel, String label, JComponent field, GridBagConstraints gbc, int row) {
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        panel.add(new JLabel(label), gbc);
+    private JPanel createMIBBrowserPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        gbc.gridx = 1;
-        gbc.gridy = row;
-        panel.add(field, gbc);
+        // Create search panel
+        JPanel searchPanel = new JPanel(new BorderLayout());
+        JTextField searchField = new JTextField(20);
+        JButton searchButton = new JButton("Search");
+
+        JPanel searchInputPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        searchInputPanel.add(new JLabel("Search:"));
+        searchInputPanel.add(searchField);
+        searchInputPanel.add(searchButton);
+
+        // Add Back button
+        backButton = new JButton("Back");
+        backButton.setEnabled(false);
+        searchInputPanel.add(backButton);
+
+        searchPanel.add(searchInputPanel, BorderLayout.NORTH);
+
+        // Create MIBs list
+        mibsListModel = new DefaultListModel<>();
+        mibsList = new JList<>(mibsListModel);
+        mibsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JScrollPane mibsScroll = new JScrollPane(mibsList);
+        mibsScroll.setBorder(BorderFactory.createTitledBorder("MIBs and OIDs"));
+
+        // Create detail panel
+        JPanel detailPanel = new JPanel(new BorderLayout());
+        JTextArea nodeDetailArea = new JTextArea();
+        nodeDetailArea.setEditable(false);
+        JScrollPane detailScroll = new JScrollPane(nodeDetailArea);
+        detailScroll.setBorder(BorderFactory.createTitledBorder("Node Details"));
+
+        // Action buttons
+        JPanel mibActionsPanel = new JPanel();
+        JButton importMibButton = new JButton("Import MIB");
+        JButton setMibDirButton = new JButton("Set MIB Directory");
+        JButton querySelectedButton = new JButton("Query Selected");
+
+        mibActionsPanel.add(importMibButton);
+        mibActionsPanel.add(setMibDirButton);
+        mibActionsPanel.add(querySelectedButton);
+
+        detailPanel.add(detailScroll, BorderLayout.CENTER);
+        detailPanel.add(mibActionsPanel, BorderLayout.SOUTH);
+
+        // Create split pane
+        JSplitPane splitPane = new JSplitPane(
+                JSplitPane.HORIZONTAL_SPLIT, mibsScroll, detailPanel);
+        splitPane.setDividerLocation(300);
+
+        // Add listeners
+        searchButton.addActionListener(e -> searchMibs(searchField.getText()));
+        importMibButton.addActionListener(e -> importMib());
+        setMibDirButton.addActionListener(e -> setMibDirectory());
+        querySelectedButton.addActionListener(e -> querySelectedNode());
+        
+        // Double-click to navigate/select
+        mibsList.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    int index = mibsList.locationToIndex(evt.getPoint());
+                    if (index >= 0) {
+                        String selectedNode = mibsListModel.getElementAt(index);
+                        if (selectedNode != null) {
+                            // Extract OID from selection (assuming format "OID (MIB_NAME)" or just "OID")
+                            String oid = selectedNode;
+                            if (selectedNode.contains(" (")) {
+                                oid = selectedNode.substring(0, selectedNode.indexOf(" ("));
+                            }
+                            java.util.List<org.example.Node> children = snmpManager.getChildrenOfOid(oid);
+                            if (children != null && !children.isEmpty()) {
+                                // Navigate into this node
+                                currentOidPath = oid;
+                                updateMibsListWithChildren(children);
+                                backButton.setEnabled(true);
+                            } else {
+                                // No children, show node details as before
+                                displayNodeDetails(selectedNode, nodeDetailArea);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Back button logic
+        backButton.addActionListener(e -> {
+            if (currentOidPath == null || currentOidPath.isEmpty()) return;
+            // Remove last part of OID path
+            int lastDot = currentOidPath.lastIndexOf('.');
+            if (lastDot > 0) {
+                currentOidPath = currentOidPath.substring(0, lastDot);
+            } else {
+                currentOidPath = "";
+            }
+            java.util.List<org.example.Node> children = snmpManager.getChildrenOfOid(currentOidPath);
+            updateMibsListWithChildren(children);
+            backButton.setEnabled(!currentOidPath.isEmpty());
+        });
+
+        panel.add(searchPanel, BorderLayout.NORTH);
+        panel.add(splitPane, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    private JPanel createResultsPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // Create table model
+        String[] columns = {"OID", "Value", "Type", "Description"};
+        tableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+
+        queryTable = new JTable(tableModel);
+        queryTable.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JScrollPane tableScroll = new JScrollPane(queryTable);
+
+        // Create button panel
+        JPanel buttonPanel = new JPanel();
+        JButton exportButton = new JButton("Export to CSV");
+        JButton clearButton = new JButton("Clear Results");
+
+        buttonPanel.add(exportButton);
+        buttonPanel.add(clearButton);
+
+        // Add listeners
+        exportButton.addActionListener(e -> exportToCSV());
+        clearButton.addActionListener(e -> clearResults());
+
+        panel.add(tableScroll, BorderLayout.CENTER);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
+    private JToolBar createToolBar() {
+        JToolBar toolBar = new JToolBar();
+        toolBar.setFloatable(false);
+
+        JButton refreshButton = new JButton("Refresh MIBs");
+        JButton aboutButton = new JButton("About");
+
+        toolBar.add(refreshButton);
+        toolBar.addSeparator(new Dimension(20, 10));
+        toolBar.add(aboutButton);
+
+        refreshButton.addActionListener(e -> {
+            snmpManager.loadMibFiles();
+            loadMibsIntoList();
+            statusLabel.setText("MIBs refreshed");
+        });
+
+        aboutButton.addActionListener(e -> JOptionPane.showMessageDialog(
+                this,
+                "SNMP Browser v1.0\nDeveloped by Your Team",
+                "About SNMP Browser",
+                JOptionPane.INFORMATION_MESSAGE
+        ));
+
+        return toolBar;
+    }
+
+    private JPanel createStatusPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createEtchedBorder());
+
+        statusLabel = new JLabel("Ready");
+        operationProgress = new JProgressBar();
+        operationProgress.setStringPainted(true);
+        operationProgress.setString("");
+        operationProgress.setVisible(false);
+
+        panel.add(statusLabel, BorderLayout.WEST);
+        panel.add(operationProgress, BorderLayout.EAST);
+
+        return panel;
+    }
+
+    private void loadInitialData() {
+        // Load MIBs and build OID tree first!
+        snmpManager.loadMibFiles();
+
+        // Load recent targets into combobox
+        for (String target : snmpManager.getRecentTargets()) {
+            recentTargetsCombo.addItem(target);
+        }
+
+        // Now load the root OIDs into the list
+        loadMibsIntoList();
+    }
+
+    private void loadMibsIntoList() {
+        mibsListModel.clear();
+        currentOidPath = "";
+        java.util.List<org.example.Node> rootChildren = snmpManager.getChildrenOfOid("");
+        updateMibsListWithChildren(rootChildren);
+        backButton.setEnabled(false);
+    }
+
+    private void updateMibsListWithChildren(java.util.List<org.example.Node> children) {
+        mibsListModel.clear();
+        for (org.example.Node child : children) {
+            if (child.oid != null) {
+                mibsListModel.addElement(child.oid + (child.name != null ? " (" + child.name + ")" : ""));
+            }
+        }
     }
 
     private void performGet() {
@@ -91,24 +378,211 @@ public class SNMPBrowserUI {
             String community = communityField.getText();
             String oid = oidField.getText();
 
+            setInProgress("Performing Get operation...");
+
             String result = snmpManager.get(ipAddress, port, community, oid);
             resultArea.append(result + "\n");
+
+            // Add to results table
+            addResultToTable(oid, result);
+
+            setCompleted("Get operation completed");
         } catch (NumberFormatException e) {
-            resultArea.append("Error: Invalid port number\n");
+            UIHelper.showError("Error", "Invalid port number");
+            setCompleted("Error: Invalid port number");
         } catch (Exception e) {
-            resultArea.append("Error: " + e.getMessage() + "\n");
+            UIHelper.showError("Error", e.getMessage());
+            setCompleted("Error: " + e.getMessage());
         }
+    }
+
+    private void performGetNext() {
+        try {
+            String ipAddress = ipAddressField.getText();
+            int port = Integer.parseInt(portField.getText());
+            String community = communityField.getText();
+            String oid = oidField.getText();
+
+            setInProgress("Performing GetNext operation...");
+
+            List<String> result = snmpManager.getNext(ipAddress, port, community, oid);
+            if (result.size() > 0) {
+                resultArea.append(result.get(0) + "\n");
+
+                // Update OID field with next OID
+                if (result.size() > 1) {
+                    oidField.setText(result.get(1));
+                }
+
+                // Add to results table
+                addResultToTable(oid, result.get(0));
+            }
+
+            setCompleted("GetNext operation completed");
+        } catch (NumberFormatException e) {
+            UIHelper.showError("Error", "Invalid port number");
+            setCompleted("Error: Invalid port number");
+        } catch (Exception e) {
+            UIHelper.showError("Error", e.getMessage());
+            setCompleted("Error: " + e.getMessage());
+        }
+    }
+
+    private void performWalk() {
+        try {
+            String ipAddress = ipAddressField.getText();
+            int port = Integer.parseInt(portField.getText());
+            String community = communityField.getText();
+            String oid = oidField.getText();
+
+            setInProgress("Performing Walk operation...");
+
+            List<String> results = snmpManager.walk(ipAddress, port, community, oid);
+
+            for (String result : results) {
+                resultArea.append(result + "\n");
+
+                // Add to results table
+                addResultToTable(oid, result);
+            }
+
+            setCompleted("Walk operation completed - " + results.size() + " results");
+        } catch (NumberFormatException e) {
+            UIHelper.showError("Error", "Invalid port number");
+            setCompleted("Error: Invalid port number");
+        } catch (Exception e) {
+            UIHelper.showError("Error", e.getMessage());
+            setCompleted("Error: " + e.getMessage());
+        }
+    }
+
+    private void addResultToTable(String oid, String result) {
+        // Parse the result string to extract information
+        String[] parts = result.split(" = ");
+        if (parts.length < 2) return;
+
+        String resultOid = parts[0];
+        String value = parts[1];
+
+        // Get node information if available
+        Node node = snmpManager.lookupNode(resultOid);
+        String type = (node != null) ? node.type : "";
+        String description = (node != null) ? node.description : "";
+
+        // Add to table
+        tableModel.addRow(new Object[]{resultOid, value, type, description});
+
+        // Switch to Results tab
+        tabbedPane.setSelectedIndex(2);
+    }
+
+    private void handleRecentTargetSelection() {
+        String selected = (String) recentTargetsCombo.getSelectedItem();
+        if (selected != null && selected.contains(":")) {
+            String[] parts = selected.split(":");
+            ipAddressField.setText(parts[0]);
+            if (parts.length > 1) {
+                portField.setText(parts[1]);
+            }
+        }
+    }
+
+    private void searchMibs(String searchTerm) {
+        setInProgress("Searching MIBs...");
+
+        mibsListModel.clear();
+        List<String> searchResults = snmpManager.searchMibNodes(searchTerm);
+
+        for (String result : searchResults) {
+            mibsListModel.addElement(result);
+        }
+
+        setCompleted("Search completed - " + searchResults.size() + " results");
+    }
+
+    private void displayNodeDetails(String selectedNode, JTextArea detailArea) {
+        // Extract OID from selection (assuming format "OID (MIB_NAME)" or just "OID")
+        String oid = selectedNode;
+        if (selectedNode.contains(" (")) {
+            oid = selectedNode.substring(0, selectedNode.indexOf(" ("));
+        }
+
+        Node node = snmpManager.lookupNode(oid);
+        if (node != null) {
+            StringBuilder details = new StringBuilder();
+            details.append("Name: ").append(node.name).append("\n");
+            details.append("OID: ").append(node.oid).append("\n");
+            details.append("Type: ").append(node.type).append("\n");
+            details.append("Access: ").append(node.access).append("\n");
+            details.append("Status: ").append(node.status).append("\n");
+            details.append("Description: ").append(node.description).append("\n");
+
+            detailArea.setText(details.toString());
+            snmpManager.selectNode(oid);
+        } else {
+            detailArea.setText("No detailed information available for this node.");
+        }
+    }
+
+    private void importMib() {
+        snmpManager.importMibFile();
+        loadMibsIntoList();
+    }
+
+    private void setMibDirectory() {
+        snmpManager.setMibDirectory();
+        loadMibsIntoList();
+    }
+
+    private void querySelectedNode() {
+        String selectedNode = mibsList.getSelectedValue();
+        if (selectedNode != null) {
+            // Extract OID from selection
+            String oid = selectedNode;
+            if (selectedNode.contains(" (")) {
+                oid = selectedNode.substring(0, selectedNode.indexOf(" ("));
+            }
+
+            // Set the OID in the query tab
+            oidField.setText(oid);
+
+            // Switch to query tab
+            tabbedPane.setSelectedIndex(0);
+        }
+    }
+
+    private void exportToCSV() {
+        snmpManager.saveQueryResultsToCSV();
+    }
+
+    private void clearResults() {
+        int rowCount = tableModel.getRowCount();
+        for (int i = rowCount - 1; i >= 0; i--) {
+            tableModel.removeRow(i);
+        }
+        statusLabel.setText("Results cleared");
+    }
+
+    private void setInProgress(String message) {
+        statusLabel.setText(message);
+        operationProgress.setVisible(true);
+        operationProgress.setIndeterminate(true);
+    }
+
+    private void setCompleted(String message) {
+        statusLabel.setText(message);
+        operationProgress.setVisible(false);
+        operationProgress.setIndeterminate(false);
     }
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             try {
-                // Set system look and feel
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             } catch (Exception e) {
                 e.printStackTrace();
             }
-            new SNMPBrowserUI();
+            new SNMPBrowserUI().setVisible(true);
         });
     }
 }

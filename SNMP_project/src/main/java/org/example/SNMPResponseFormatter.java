@@ -1,11 +1,6 @@
 package org.example;
-
-
-
 import java.util.Calendar;
 import java.util.Map;
-
-
 public class SNMPResponseFormatter {
 
     public static String format(Object variable, String dataType, Map<String, Object> constraints) {
@@ -26,7 +21,6 @@ public class SNMPResponseFormatter {
                 return variable.toString();
         }
     }
-
     private static String formatInteger(Object variable, Map<String, Object> constraints) {
         //System.out.println("Formatting Integer with constraints: " + constraints);
         if (constraints != null && constraints.containsKey("enumeration")) {
@@ -42,7 +36,6 @@ public class SNMPResponseFormatter {
         }
         return variable.toString();
     }
-
     public static int[] octetStringToBytes(String response) {
         // Split string into its parts
         String[] bytes;
@@ -127,7 +120,4 @@ public class SNMPResponseFormatter {
         return (calendar.getTime().toString());
 
     } // return a human-readable date and time
-
-
 }
-

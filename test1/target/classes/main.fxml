@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx/8.0.171"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="frontend.MainController">
+
+    <!-- Thanh nhập IP/OID/lệnh -->
+    <top>
+        <HBox spacing="10" alignment="CENTER_LEFT" BorderPane.alignment="CENTER">
+            <padding>
+                <Insets top="10" right="10" bottom="10" left="10"/>
+            </padding>
+            <TextField fx:id="ipField" promptText="IP address" />
+            <ComboBox fx:id="operationBox" promptText="Operation (GET, GETNEXT...)"/>
+            <TextField fx:id="oidField" promptText="OID" />
+            <Button text="Go" onAction="#onGoClicked"/>
+        </HBox>
+    </top>
+
+    <!-- Vùng chính: chia trái phải -->
+    <center>
+        <SplitPane dividerPositions="0.35">
+            <!-- Vùng trái: MIB Tree + chi tiết node -->
+            <VBox spacing="10.0" prefWidth="300.0">
+                <padding>
+                    <Insets top="10" right="10" bottom="10" left="10"/>
+                </padding>
+
+                <!-- Cây MIB -->
+                <TreeView fx:id="mibTreeView"
+                          prefHeight="250"
+                          VBox.vgrow="NEVER"/>
+
+                <!-- Chi tiết node: cho phép giãn cao -->
+                <GridPane hgap="5.0" vgap="5.0" VBox.vgrow="ALWAYS">
+                    <columnConstraints>
+                        <ColumnConstraints hgrow="NEVER"/>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                    </columnConstraints>
+
+                    <Label text="Name:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                    <Label fx:id="nameLabel"        GridPane.rowIndex="0" GridPane.columnIndex="1"
+                           wrapText="true" maxWidth="Infinity"/>
+
+                    <Label text="OID:"  GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                    <Label fx:id="oidInfoLabel"    GridPane.rowIndex="1" GridPane.columnIndex="1"
+                           wrapText="true" maxWidth="Infinity"/>
+
+                    <Label text="MIB:"  GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                    <Label fx:id="mibLabel"        GridPane.rowIndex="2" GridPane.columnIndex="1"
+                           wrapText="true" maxWidth="Infinity"/>
+
+                    <Label text="Syntax:" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                    <Label fx:id="syntaxLabel"     GridPane.rowIndex="3" GridPane.columnIndex="1"
+                           wrapText="true" maxWidth="Infinity"/>
+
+                    <Label text="Access:" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                    <Label fx:id="accessLabel"     GridPane.rowIndex="4" GridPane.columnIndex="1"
+                           wrapText="true" maxWidth="Infinity"/>
+
+                    <Label text="Status:" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                    <Label fx:id="statusLabel"     GridPane.rowIndex="5" GridPane.columnIndex="1"
+                           wrapText="true" maxWidth="Infinity"/>
+
+                    <Label text="Description:" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
+                    <ScrollPane GridPane.rowIndex="6" GridPane.columnIndex="1"
+                                fitToWidth="true" prefHeight="80" maxHeight="120"
+                                maxWidth="200">
+                        <content>
+                            <TextArea fx:id="descriptionArea"
+                                      wrapText="true"
+                                      editable="false"/>
+                        </content>
+                    </ScrollPane>
+
+
+                </GridPane>
+            </VBox>
+
+            <!-- Vùng phải: bảng kết quả SNMP -->
+            <TableView fx:id="snmpTable" VBox.vgrow="ALWAYS">
+                <columns>
+                    <TableColumn fx:id="oidCol"    text="Name/OID" prefWidth="200"/>
+                    <TableColumn fx:id="valueCol"  text="Value"    prefWidth="200"/>
+                    <TableColumn fx:id="typeCol"   text="Type"     prefWidth="120"/>
+                    <TableColumn fx:id="ipPortCol" text="IP:Port"  prefWidth="120"/>
+                </columns>
+            </TableView>
+        </SplitPane>
+    </center>
+</BorderPane>

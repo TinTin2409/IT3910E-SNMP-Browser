@@ -9,8 +9,8 @@ public class MainApp extends Application {
 
     @Override
     public void start(Stage primaryStage) throws Exception {
-        // Load giao diện từ main.fxml
-        Parent root = FXMLLoader.load(getClass().getResource("/main.fxml"));
+        // Load giao diện từ maintest.fxml
+        Parent root = FXMLLoader.load(getClass().getResource("/maintest.fxml"));
 
         Scene scene = new Scene(root, 800, 600);
         primaryStage.setTitle("SNMP Browser Frontend");

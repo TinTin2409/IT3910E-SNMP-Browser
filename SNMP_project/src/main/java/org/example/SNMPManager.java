@@ -57,6 +57,22 @@ public class SNMPManager {
         }
     }
 
+    public void importMibDirectory(String directoryPath) {
+        File directory = new File(directoryPath);
+        if (directory.exists() && directory.isDirectory()) {
+            try {
+                mibManager.importMibDirectory(directory);
+                lastMibDirectory = directory;
+                loadMibFiles();
+                UIHelper.showInfo("Import Successful", "MIB directory imported successfully.");
+            } catch (IOException e) {
+                UIHelper.showError("Import Failed", e.getMessage());
+            }
+        } else {
+            UIHelper.showError("Import Failed", "Invalid directory path");
+        }
+    }
+
     public void setMibDirectory() {
         String directory = UIHelper.chooseDirectory();
         if (directory != null) {

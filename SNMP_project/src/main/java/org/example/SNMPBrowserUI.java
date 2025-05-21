@@ -2,9 +2,15 @@ package org.example;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreeSelectionModel;
+import javax.swing.tree.DefaultTreeCellRenderer;
+import javax.swing.tree.TreePath;
 import java.awt.*;
 import java.util.List;
-
+import java.util.Map;
+import java.util.HashMap;
 
 public class SNMPBrowserUI extends JFrame {
     // Main components
@@ -19,6 +25,8 @@ public class SNMPBrowserUI extends JFrame {
     private JComboBox<String> recentTargetsCombo;
     private JList<String> mibsList;
     private DefaultListModel<String> mibsListModel;
+    private JTree walkTree;
+    private DefaultTreeModel walkTreeModel;
 
     // Status components
     private JLabel statusLabel;
@@ -30,6 +38,8 @@ public class SNMPBrowserUI extends JFrame {
     // Track the current OID path for navigation
     private String currentOidPath = "";
     private JButton backButton;
+
+    private JPanel mainPanel;
 
     public SNMPBrowserUI() {
         super("SNMP Browser");
@@ -43,16 +53,25 @@ public class SNMPBrowserUI extends JFrame {
 
     private void initializeUI() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(900, 600);
+        setSize(1200, 800);
         setLocationRelativeTo(null);
 
-        // Create main tabbed pane
-        tabbedPane = new JTabbedPane();
+        // Main content panel
+        mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Create the different tabs
-        tabbedPane.addTab("Quick Query", createQueryPanel());
-        tabbedPane.addTab("MIB Browser", createMIBBrowserPanel());
-        tabbedPane.addTab("Results", createResultsPanel());
+        // Create all panels
+        JPanel quickQueryPanel = createQueryPanel();
+        JPanel mibBrowserPanel = createMIBBrowserPanel();
+        JPanel walkTreePanel = createWalkTreePanel();
+
+        // Center split: MIB Browser (left) and Walk Tree (right)
+        JSplitPane centerSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, mibBrowserPanel, walkTreePanel);
+        centerSplit.setDividerLocation(500);
+        centerSplit.setResizeWeight(0.5);
+
+        mainPanel.add(quickQueryPanel, BorderLayout.NORTH);
+        mainPanel.add(centerSplit, BorderLayout.CENTER);
 
         // Add status bar
         JPanel statusPanel = createStatusPanel();
@@ -60,8 +79,28 @@ public class SNMPBrowserUI extends JFrame {
         // Add to frame
         getContentPane().setLayout(new BorderLayout());
         getContentPane().add(createToolBar(), BorderLayout.NORTH);
-        getContentPane().add(tabbedPane, BorderLayout.CENTER);
+        getContentPane().add(mainPanel, BorderLayout.CENTER);
         getContentPane().add(statusPanel, BorderLayout.SOUTH);
+
+        // Add back button listener
+        backButton.addActionListener(e -> {
+            if (!currentOidPath.isEmpty()) {
+                // Go up one level
+                int lastDot = currentOidPath.lastIndexOf('.');
+                if (lastDot > 0) {
+                    currentOidPath = currentOidPath.substring(0, lastDot);
+                } else {
+                    currentOidPath = "";
+                }
+                
+                // Load children of parent node
+                List<org.example.Node> children = snmpManager.getChildrenOfOid(currentOidPath);
+                updateMibsListWithChildren(children);
+                
+                // Update back button state
+                backButton.setEnabled(!currentOidPath.isEmpty());
+            }
+        });
     }
 
     private JPanel createQueryPanel() {
@@ -127,14 +166,6 @@ public class SNMPBrowserUI extends JFrame {
         gbc.gridy = 3;
         formPanel.add(buttonPanel, gbc);
 
-        // Results area
-        resultArea = new JTextArea();
-        resultArea.setEditable(false);
-        resultArea.setWrapStyleWord(true);
-        resultArea.setLineWrap(true);
-        JScrollPane resultScroll = new JScrollPane(resultArea);
-        resultScroll.setBorder(BorderFactory.createTitledBorder("Results"));
-
         // Add action listeners
         getButton.addActionListener(e -> performGet());
         getNextButton.addActionListener(e -> performGetNext());
@@ -143,7 +174,6 @@ public class SNMPBrowserUI extends JFrame {
         recentTargetsCombo.addActionListener(e -> handleRecentTargetSelection());
 
         panel.add(formPanel, BorderLayout.NORTH);
-        panel.add(resultScroll, BorderLayout.CENTER);
 
         return panel;
     }
@@ -187,6 +217,7 @@ public class SNMPBrowserUI extends JFrame {
         mibsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         JScrollPane mibsScroll = new JScrollPane(mibsList);
         mibsScroll.setBorder(BorderFactory.createTitledBorder("MIBs and OIDs"));
+        mibsScroll.setPreferredSize(new Dimension(400, 600)); // Set preferred size
 
         // Create detail panel
         JPanel detailPanel = new JPanel(new BorderLayout());
@@ -194,15 +225,16 @@ public class SNMPBrowserUI extends JFrame {
         nodeDetailArea.setEditable(false);
         JScrollPane detailScroll = new JScrollPane(nodeDetailArea);
         detailScroll.setBorder(BorderFactory.createTitledBorder("Node Details"));
+        detailScroll.setPreferredSize(new Dimension(400, 600)); // Set preferred size
 
         // Action buttons
         JPanel mibActionsPanel = new JPanel();
         JButton importMibButton = new JButton("Import MIB");
-        JButton setMibDirButton = new JButton("Set MIB Directory");
+        JButton importMibDirButton = new JButton("Import MIB Directory");
         JButton querySelectedButton = new JButton("Query Selected");
 
         mibActionsPanel.add(importMibButton);
-        mibActionsPanel.add(setMibDirButton);
+        mibActionsPanel.add(importMibDirButton);
         mibActionsPanel.add(querySelectedButton);
 
         detailPanel.add(detailScroll, BorderLayout.CENTER);
@@ -211,56 +243,23 @@ public class SNMPBrowserUI extends JFrame {
         // Create split pane
         JSplitPane splitPane = new JSplitPane(
                 JSplitPane.HORIZONTAL_SPLIT, mibsScroll, detailPanel);
-        splitPane.setDividerLocation(300);
+        splitPane.setDividerLocation(400); // Set initial divider location
+        splitPane.setResizeWeight(0.5); // Make both sides equal
 
         // Add listeners
         searchButton.addActionListener(e -> searchMibs(searchField.getText()));
         importMibButton.addActionListener(e -> importMib());
-        setMibDirButton.addActionListener(e -> setMibDirectory());
+        importMibDirButton.addActionListener(e -> importMibDirectory());
         querySelectedButton.addActionListener(e -> querySelectedNode());
         
-        // Double-click to navigate/select
-        mibsList.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseClicked(java.awt.event.MouseEvent evt) {
-                if (evt.getClickCount() == 2) {
-                    int index = mibsList.locationToIndex(evt.getPoint());
-                    if (index >= 0) {
-                        String selectedNode = mibsListModel.getElementAt(index);
-                        if (selectedNode != null) {
-                            // Extract OID from selection (assuming format "OID (MIB_NAME)" or just "OID")
-                            String oid = selectedNode;
-                            if (selectedNode.contains(" (")) {
-                                oid = selectedNode.substring(0, selectedNode.indexOf(" ("));
-                            }
-                            java.util.List<org.example.Node> children = snmpManager.getChildrenOfOid(oid);
-                            if (children != null && !children.isEmpty()) {
-                                // Navigate into this node
-                                currentOidPath = oid;
-                                updateMibsListWithChildren(children);
-                                backButton.setEnabled(true);
-                            } else {
-                                // No children, show node details as before
-                                displayNodeDetails(selectedNode, nodeDetailArea);
-                            }
-                        }
-                    }
+        // Add selection listener to show details
+        mibsList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                String selectedNode = mibsList.getSelectedValue();
+                if (selectedNode != null) {
+                    displayNodeDetails(selectedNode, nodeDetailArea);
                 }
             }
-        });
-        
-        // Back button logic
-        backButton.addActionListener(e -> {
-            if (currentOidPath == null || currentOidPath.isEmpty()) return;
-            // Remove last part of OID path
-            int lastDot = currentOidPath.lastIndexOf('.');
-            if (lastDot > 0) {
-                currentOidPath = currentOidPath.substring(0, lastDot);
-            } else {
-                currentOidPath = "";
-            }
-            java.util.List<org.example.Node> children = snmpManager.getChildrenOfOid(currentOidPath);
-            updateMibsListWithChildren(children);
-            backButton.setEnabled(!currentOidPath.isEmpty());
         });
 
         panel.add(searchPanel, BorderLayout.NORTH);
@@ -269,49 +268,40 @@ public class SNMPBrowserUI extends JFrame {
         return panel;
     }
 
-    private JPanel createResultsPanel() {
+    private JPanel createWalkTreePanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Create table model
-        String[] columns = {"OID", "Value", "Type", "Description"};
-        tableModel = new DefaultTableModel(columns, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
-        };
+        // Create tree model and tree
+        DefaultMutableTreeNode root = new DefaultMutableTreeNode("SNMP Tree");
+        walkTreeModel = new DefaultTreeModel(root);
+        walkTree = new JTree(walkTreeModel);
+        walkTree.setShowsRootHandles(true);
+        walkTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
-        queryTable = new JTable(tableModel);
-        queryTable.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        JScrollPane tableScroll = new JScrollPane(queryTable);
+        // Add tree to scroll pane
+        JScrollPane treeScroll = new JScrollPane(walkTree);
+        treeScroll.setBorder(BorderFactory.createTitledBorder("SNMP Query Results"));
 
-        // Create button panel
-        JPanel buttonPanel = new JPanel();
-        JButton exportButton = new JButton("Export to CSV");
-        JButton clearButton = new JButton("Clear Results");
-
-        buttonPanel.add(exportButton);
-        buttonPanel.add(clearButton);
-
-        // Add listeners
-        exportButton.addActionListener(e -> exportToCSV());
-        clearButton.addActionListener(e -> clearResults());
-
-        panel.add(tableScroll, BorderLayout.CENTER);
-        panel.add(buttonPanel, BorderLayout.SOUTH);
-
-        queryTable.addMouseListener(new java.awt.event.MouseAdapter() {
+        // Add double-click listener to show details
+        walkTree.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseClicked(java.awt.event.MouseEvent evt) {
                 if (evt.getClickCount() == 2) {
-                    int row = queryTable.rowAtPoint(evt.getPoint());
-                    if (row >= 0) {
-                        showRowDetailsDialog(row);
+                    DefaultMutableTreeNode node = (DefaultMutableTreeNode)
+                            walkTree.getLastSelectedPathComponent();
+                    if (node != null && node.isLeaf()) {
+                        showNodeDetails(node.getUserObject().toString());
                     }
                 }
             }
         });
 
+        DefaultTreeCellRenderer renderer = (DefaultTreeCellRenderer) walkTree.getCellRenderer();
+        renderer.setOpenIcon(null);
+        renderer.setClosedIcon(null);
+        renderer.setLeafIcon(null);
+
+        panel.add(treeScroll, BorderLayout.CENTER);
         return panel;
     }
 
@@ -374,7 +364,13 @@ public class SNMPBrowserUI extends JFrame {
         mibsListModel.clear();
         for (org.example.Node child : children) {
             if (child.oid != null) {
-                mibsListModel.addElement(child.oid + (child.name != null ? " (" + child.name + ")" : ""));
+                String displayText = child.oid;
+                if (child.name != null) {
+                    displayText += " (" + child.name + ")";
+                }
+                mibsListModel.addElement(displayText);
+                // Debug output
+                System.out.println("Added to list: " + displayText);
             }
         }
     }
@@ -389,10 +385,12 @@ public class SNMPBrowserUI extends JFrame {
             setInProgress("Performing Get operation...");
 
             String result = snmpManager.get(ipAddress, port, community, oid);
-            resultArea.append(result + "\n");
-
-            // Add to results table
-            addResultToTable(oid, result);
+            String[] parts = result.split(" = ");
+            if (parts.length >= 2) {
+                displaySingleOidInTree(parts[0], parts[1].trim());
+                // Expand the tree to the queried OID
+                expandTreeToOid(oid);
+            }
 
             setCompleted("Get operation completed");
         } catch (NumberFormatException e) {
@@ -415,15 +413,12 @@ public class SNMPBrowserUI extends JFrame {
 
             List<String> result = snmpManager.getNext(ipAddress, port, community, oid);
             if (result.size() > 0) {
-                resultArea.append(result.get(0) + "\n");
-
-                // Update OID field with next OID
-                if (result.size() > 1) {
-                    oidField.setText(result.get(1));
+                String[] parts = result.get(0).split(" = ");
+                if (parts.length >= 2) {
+                    displaySingleOidInTree(parts[0], parts[1].trim());
+                    // Expand the tree to the next OID
+                    expandTreeToOid(parts[0]);
                 }
-
-                // Add to results table
-                addResultToTable(oid, result.get(0));
             }
 
             setCompleted("GetNext operation completed");
@@ -433,6 +428,36 @@ public class SNMPBrowserUI extends JFrame {
         } catch (Exception e) {
             UIHelper.showError("Error", e.getMessage());
             setCompleted("Error: " + e.getMessage());
+        }
+    }
+
+    private void expandTreeToOid(String targetOid) {
+        String[] oidParts = targetOid.split("\\.");
+        StringBuilder pathBuilder = new StringBuilder();
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) walkTreeModel.getRoot();
+        
+        // First expand the root
+        walkTree.expandRow(0);
+        
+        // Then expand each part of the path
+        for (int i = 0; i < oidParts.length; i++) {
+            if (i > 0) pathBuilder.append(".");
+            pathBuilder.append(oidParts[i]);
+            String currentPath = pathBuilder.toString();
+            
+            // Find the node in the tree
+            for (int j = 0; j < root.getChildCount(); j++) {
+                DefaultMutableTreeNode child = (DefaultMutableTreeNode) root.getChildAt(j);
+                if (child.getUserObject().equals(currentPath)) {
+                    // Expand this node
+                    int row = walkTree.getRowForPath(new TreePath(child.getPath()));
+                    if (row != -1) {
+                        walkTree.expandRow(row);
+                    }
+                    root = child;
+                    break;
+                }
+            }
         }
     }
 
@@ -447,12 +472,45 @@ public class SNMPBrowserUI extends JFrame {
 
             List<String> results = snmpManager.walk(ipAddress, port, community, oid);
 
-            for (String result : results) {
-                resultArea.append(result + "\n");
+            // Build the tree
+            DefaultMutableTreeNode root = (DefaultMutableTreeNode) walkTreeModel.getRoot();
+            root.removeAllChildren();
+            walkTreeModel.reload();
 
-                // Add to results table
-                addResultToTable(oid, result);
+            Map<String, DefaultMutableTreeNode> nodeMap = new HashMap<>();
+            nodeMap.put("", root);
+
+            for (String result : results) {
+                String[] parts = result.split(" = ");
+                if (parts.length < 2) continue;
+                String resultOid = parts[0];
+                String value = parts[1].trim();
+
+                String[] oidParts = resultOid.split("\\.");
+                StringBuilder pathBuilder = new StringBuilder();
+                DefaultMutableTreeNode parent = root;
+
+                for (int i = 0; i < oidParts.length; i++) {
+                    if (i > 0) pathBuilder.append(".");
+                    pathBuilder.append(oidParts[i]);
+                    String path = pathBuilder.toString();
+
+                    DefaultMutableTreeNode node = nodeMap.get(path);
+                    if (node == null) {
+                        node = new DefaultMutableTreeNode(path);
+                        parent.add(node);
+                        nodeMap.put(path, node);
+                    }
+                    parent = node;
+                }
+                // Add the value as a leaf node
+                DefaultMutableTreeNode valueNode = new DefaultMutableTreeNode(result);
+                parent.add(valueNode);
             }
+            walkTreeModel.reload();
+            
+            // Expand the tree to the queried OID
+            expandTreeToOid(oid);
 
             setCompleted("Walk operation completed - " + results.size() + " results");
         } catch (NumberFormatException e) {
@@ -462,41 +520,6 @@ public class SNMPBrowserUI extends JFrame {
             UIHelper.showError("Error", e.getMessage());
             setCompleted("Error: " + e.getMessage());
         }
-    }
-
-    private void addResultToTable(String oid, String result) {
-        // Parse the result string to extract information
-        String[] parts = result.split(" = ");
-        if (parts.length < 2) return;
-
-        String resultOid = parts[0];
-        String value = parts[1].trim();
-
-        // Filter out SNMP errors
-        if (value.equalsIgnoreCase("noSuchInstance") || value.equalsIgnoreCase("noSuchObject")) {
-            // Optionally, show a message or skip adding to the table
-            // JOptionPane.showMessageDialog(this, "OID " + resultOid + " is not a valid instance or object.", "SNMP Error", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        // Get node information if available
-        Node node = snmpManager.lookupNode(resultOid);
-        if (node == null) {
-            // Try to get the base OID (for tabular data)
-            int lastDot = resultOid.lastIndexOf('.');
-            if (lastDot > 0) {
-                String baseOid = resultOid.substring(0, lastDot);
-                node = snmpManager.lookupNode(baseOid);
-            }
-        }
-        String type = (node != null) ? node.type : "";
-        String description = (node != null) ? node.description : "";
-
-        // Add to table
-        tableModel.addRow(new Object[]{resultOid, value, type, description});
-
-        // Switch to Results tab
-        tabbedPane.setSelectedIndex(2);
     }
 
     private void handleRecentTargetSelection() {
@@ -563,6 +586,20 @@ public class SNMPBrowserUI extends JFrame {
 
             detailArea.setText(details.toString());
             snmpManager.selectNode(oid);
+
+            // Check if this is a leaf node (has no children)
+            List<org.example.Node> children = snmpManager.getChildrenOfOid(oid);
+            if (children.isEmpty()) {
+                // This is a leaf node, don't navigate
+                return;
+            }
+
+            // Not a leaf node, navigate to children
+            currentOidPath = oid;
+            updateMibsListWithChildren(children);
+            
+            // Enable back button if we're not at root
+            backButton.setEnabled(!currentOidPath.isEmpty());
         } else {
             detailArea.setText("No detailed information available for this node.");
         }
@@ -575,11 +612,19 @@ public class SNMPBrowserUI extends JFrame {
         updateMibsListWithChildren(children);
     }
 
-    private void setMibDirectory() {
-        snmpManager.setMibDirectory();
-        // Refresh the list for the current node
-        List<org.example.Node> children = snmpManager.getChildrenOfOid(currentOidPath);
-        updateMibsListWithChildren(children);
+    private void importMibDirectory() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        fileChooser.setDialogTitle("Select MIB Directory to Import");
+        
+        int result = fileChooser.showOpenDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            String selectedDir = fileChooser.getSelectedFile().getAbsolutePath();
+            snmpManager.importMibDirectory(selectedDir);
+            // Refresh the list
+            loadMibsIntoList();
+            statusLabel.setText("MIB directory imported: " + selectedDir);
+        }
     }
 
     private void querySelectedNode() {
@@ -591,24 +636,19 @@ public class SNMPBrowserUI extends JFrame {
                 oid = selectedNode.substring(0, selectedNode.indexOf(" ("));
             }
 
-            // Set the OID in the query tab
+            // Set the OID in the query field
             oidField.setText(oid);
-
-            // Switch to query tab
-            tabbedPane.setSelectedIndex(0);
+            
+            // Update status
+            statusLabel.setText("Selected OID: " + oid);
+            
+            // Debug output
+            System.out.println("Selected node: " + selectedNode);
+            System.out.println("Extracted OID: " + oid);
+            System.out.println("Set OID field to: " + oidField.getText());
+        } else {
+            statusLabel.setText("No node selected");
         }
-    }
-
-    private void exportToCSV() {
-        snmpManager.saveQueryResultsToCSV();
-    }
-
-    private void clearResults() {
-        int rowCount = tableModel.getRowCount();
-        for (int i = rowCount - 1; i >= 0; i--) {
-            tableModel.removeRow(i);
-        }
-        statusLabel.setText("Results cleared");
     }
 
     private void setInProgress(String message) {
@@ -635,14 +675,60 @@ public class SNMPBrowserUI extends JFrame {
             // Heuristic: if OID ends with .0, treat as scalar, else treat as table
             if (oid.trim().endsWith(".0")) {
                 String result = snmpManager.get(ipAddress, port, community, oid);
-                resultArea.append(result + "\n");
-                addResultToTable(oid, result);
+                String[] parts = result.split(" = ");
+                if (parts.length >= 2) {
+                    // For scalar values, create a simpler tree structure
+                    DefaultMutableTreeNode root = (DefaultMutableTreeNode) walkTreeModel.getRoot();
+                    root.removeAllChildren();
+                    
+                    // Create a single node with the OID and value
+                    DefaultMutableTreeNode valueNode = new DefaultMutableTreeNode(result);
+                    root.add(valueNode);
+                    
+                    walkTreeModel.reload();
+                    walkTree.expandRow(0);
+                }
             } else {
                 List<String> results = snmpManager.walk(ipAddress, port, community, oid);
+                // Build the tree (same as performWalk)
+                DefaultMutableTreeNode root = (DefaultMutableTreeNode) walkTreeModel.getRoot();
+                root.removeAllChildren();
+                walkTreeModel.reload();
+
+                Map<String, DefaultMutableTreeNode> nodeMap = new HashMap<>();
+                nodeMap.put("", root);
+
                 for (String result : results) {
-                    resultArea.append(result + "\n");
-                    addResultToTable(oid, result);
+                    String[] parts = result.split(" = ");
+                    if (parts.length < 2) continue;
+                    String resultOid = parts[0];
+                    String value = parts[1].trim();
+
+                    String[] oidParts = resultOid.split("\\.");
+                    StringBuilder pathBuilder = new StringBuilder();
+                    DefaultMutableTreeNode parent = root;
+
+                    for (int i = 0; i < oidParts.length; i++) {
+                        if (i > 0) pathBuilder.append(".");
+                        pathBuilder.append(oidParts[i]);
+                        String path = pathBuilder.toString();
+
+                        DefaultMutableTreeNode node = nodeMap.get(path);
+                        if (node == null) {
+                            node = new DefaultMutableTreeNode(path);
+                            parent.add(node);
+                            nodeMap.put(path, node);
+                        }
+                        parent = node;
+                    }
+                    // Add the value as a leaf node
+                    DefaultMutableTreeNode valueNode = new DefaultMutableTreeNode(result);
+                    parent.add(valueNode);
                 }
+                walkTreeModel.reload();
+                
+                // Expand the tree to the queried OID
+                expandTreeToOid(oid);
             }
 
             setCompleted("Smart Query completed");
@@ -655,31 +741,67 @@ public class SNMPBrowserUI extends JFrame {
         }
     }
 
-    private void showRowDetailsDialog(int row) {
-        String oid = tableModel.getValueAt(row, 0) != null ? tableModel.getValueAt(row, 0).toString() : "";
-        String value = tableModel.getValueAt(row, 1) != null ? tableModel.getValueAt(row, 1).toString() : "";
-        String type = tableModel.getValueAt(row, 2) != null ? tableModel.getValueAt(row, 2).toString() : "";
-        String description = tableModel.getValueAt(row, 3) != null ? tableModel.getValueAt(row, 3).toString() : "";
+    private void showNodeDetails(String nodeInfo) {
+        String[] parts = nodeInfo.split(" = ");
+        if (parts.length < 2) return;
+
+        String oid = parts[0];
+        String value = parts[1].trim();
 
         JTextArea textArea = new JTextArea(
             "OID: " + oid + "\n\n" +
-            "Value: " + value + "\n\n" +
-            "Type: " + type + "\n\n" +
-            "Description: " + description
+            "Value: " + value
         );
         textArea.setEditable(false);
         textArea.setLineWrap(true);
         textArea.setWrapStyleWord(true);
 
         JScrollPane scrollPane = new JScrollPane(textArea);
-        scrollPane.setPreferredSize(new java.awt.Dimension(600, 200)); // 2 width * 4 height (approx)
+        scrollPane.setPreferredSize(new Dimension(400, 200));
 
         JOptionPane.showMessageDialog(
             this,
             scrollPane,
-            "Row Details",
+            "Node Details",
             JOptionPane.INFORMATION_MESSAGE
         );
+    }
+
+    private void displaySingleOidInTree(String oid, String value) {
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) walkTreeModel.getRoot();
+        root.removeAllChildren();
+        walkTreeModel.reload();
+
+        String[] oidParts = oid.split("\\.");
+        StringBuilder pathBuilder = new StringBuilder();
+        DefaultMutableTreeNode parent = root;
+
+        for (int i = 0; i < oidParts.length; i++) {
+            if (i > 0) pathBuilder.append(".");
+            pathBuilder.append(oidParts[i]);
+            String path = pathBuilder.toString();
+
+            DefaultMutableTreeNode node = null;
+            // Find if node already exists (shouldn't, but for safety)
+            for (int j = 0; j < parent.getChildCount(); j++) {
+                DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(j);
+                if (child.getUserObject().equals(path)) {
+                    node = child;
+                    break;
+                }
+            }
+            if (node == null) {
+                node = new DefaultMutableTreeNode(path);
+                parent.add(node);
+            }
+            parent = node;
+        }
+        // Add the value as a leaf node
+        DefaultMutableTreeNode valueNode = new DefaultMutableTreeNode(oid + " = " + value);
+        parent.add(valueNode);
+
+        walkTreeModel.reload();
+        walkTree.expandRow(0);
     }
 
     public static void main(String[] args) {

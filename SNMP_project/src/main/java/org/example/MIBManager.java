@@ -37,6 +37,22 @@ public class MIBManager {
         loadMibFiles();
     }
 
+    public void importMibDirectory(File directory) throws IOException {
+        if (!directory.exists() || !directory.isDirectory()) {
+            throw new IOException("Invalid directory path");
+        }
+
+        File[] files = directory.listFiles((dir, name) -> name.toLowerCase().endsWith(".json"));
+        if (files != null) {
+            for (File file : files) {
+                Path source = file.toPath();
+                Path target = Paths.get(currentMibDirectory, file.getName());
+                Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+            loadMibFiles();
+        }
+    }
+
     public void setMibDirectory(String directory) {
         currentMibDirectory = directory;
         configManager.setMibDirectory(directory);

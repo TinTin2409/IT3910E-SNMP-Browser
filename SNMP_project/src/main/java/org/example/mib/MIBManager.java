@@ -1,4 +1,7 @@
-package org.example;
+package org.example.mib;
+
+import org.example.config.SNMPConfigurationManager;
+import org.example.ui.UIHelper;
 
 import java.io.File;
 import java.io.IOException;

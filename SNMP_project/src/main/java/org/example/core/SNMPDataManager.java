@@ -1,5 +1,7 @@
-package org.example;
+package org.example.core;
 
+import org.example.mib.MIBManager;
+import org.example.mib.Node;
 import org.snmp4j.smi.VariableBinding;
 
 import java.io.FileWriter;

@@ -1,4 +1,4 @@
-package org.example;
+package org.example.operation;
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.PDU;
 import org.snmp4j.Snmp;
@@ -11,33 +11,34 @@ import org.snmp4j.smi.UdpAddress;
 import org.snmp4j.smi.VariableBinding;
 import org.snmp4j.transport.DefaultUdpTransportMapping;
 import java.io.IOException;
-public class SNMPGetNext {
-
+public class SNMPGet {
     private final VariableBinding vb; // Variable binding to store the response from the SNMP agent
     private TransportMapping<UdpAddress> createTransportMapping() throws IOException {
+        // Create a transport mapping using UDP protocol. This is used by the Snmp class to send requests.
         TransportMapping<UdpAddress> transport = new DefaultUdpTransportMapping();
         transport.listen(); // Start listening for responses
         return transport;
     }
     private CommunityTarget<UdpAddress> createTarget(UdpAddress ipAddress, String community) {
+        // Create a target address. This is where the SNMP request will be sent.
         CommunityTarget<UdpAddress> target = new CommunityTarget<>();
         target.setCommunity(new OctetString(community)); // Set the community string
-        target.setVersion(SnmpConstants.version2c); // Set the SNMP version
-        target.setAddress(ipAddress); // Set the address of the SNMP agent
-        target.setRetries(2); // Set the number of retries
-        target.setTimeout(1000); // Set the timeout (in milliseconds)
+        target.setVersion(SnmpConstants.version2c); // Set the SNMP version. Could be v1, v2c, or v3.
+        target.setAddress(ipAddress); // Set the address of the SNMP agent. The port number is 161 for SNMP Get request.
+        target.setRetries(2); // Set the number of retries when a request fails.
+        target.setTimeout(1000); // Set the timeout (in milliseconds).
         return target;
     }
     private PDU createPDU(String oid) {
         PDU pdu = new PDU();
-        pdu.add(new VariableBinding(new OID(oid))); // Add the OID to the PDU
-        pdu.setType(PDU.GETNEXT); // Set the type of the PDU to GETNEXT
+        pdu.add(new VariableBinding(new OID(oid))); // Add an OID (Object Identifier) to the PDU. This is what you want to get from the SNMP agent.
+        pdu.setType(PDU.GET); // Set the type of the PDU to GETNEXT. It could also be SET, GET, GETBULK, etc.
         return pdu;
     }
     private VariableBinding processResponse(ResponseEvent<UdpAddress> response) {
         VariableBinding vb = null;
         if (response != null) {
-            PDU responsePDU = response.getResponse(); // Retrieve the response PDU
+            PDU responsePDU = response.getResponse(); //Retrieve the response PDU
 
             if (responsePDU != null) {
                 int errorStatus = responsePDU.getErrorStatus();
@@ -55,7 +56,12 @@ public class SNMPGetNext {
         }
         return vb;
     }
-    public SNMPGetNext(UdpAddress ipAddress, String community, String oid) throws IOException {
+
+
+    /**
+     * Constructor to perform the SNMP GET request
+     */
+    public SNMPGet(UdpAddress ipAddress, String community, String oid) throws IOException {
         // Create a transport mapping
         TransportMapping<UdpAddress> transport = createTransportMapping();
 
@@ -68,7 +74,7 @@ public class SNMPGetNext {
         // Create an SNMP instance
         Snmp snmp = new Snmp(transport);
 
-        // Send the GET-NEXT request
+        // Send the GET request
         ResponseEvent<UdpAddress> response = snmp.send(pdu, target);
 
         // Process the response
@@ -77,7 +83,13 @@ public class SNMPGetNext {
         // Close the SNMP session
         snmp.close();
     }
+
+    /**
+     * Getter
+     * @return The VariableBinding object containing the response data
+     */
     public VariableBinding getVariableBinding() {
         return this.vb;
     }
+
 }

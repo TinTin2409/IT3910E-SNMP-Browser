@@ -1,4 +1,4 @@
-package org.example;
+package org.example.operation;
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.Snmp;
 import org.snmp4j.TransportMapping;

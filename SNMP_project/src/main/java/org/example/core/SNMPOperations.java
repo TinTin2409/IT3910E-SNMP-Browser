@@ -1,6 +1,12 @@
 // SNMPOperations.java
-package org.example;
+package org.example.core;
 
+import org.example.config.SNMPConfigurationManager;
+import org.example.mib.MIBManager;
+import org.example.mib.Node;
+import org.example.operation.SNMPGet;
+import org.example.operation.SNMPGetNext;
+import org.example.operation.SNMPWalk;
 import org.snmp4j.smi.UdpAddress;
 import org.snmp4j.smi.VariableBinding;
 

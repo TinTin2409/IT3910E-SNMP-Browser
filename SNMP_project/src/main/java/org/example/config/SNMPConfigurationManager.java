@@ -1,5 +1,7 @@
 // ConfigurationManager.java
-package org.example;
+package org.example.config;
+
+import org.example.ui.UIHelper;
 
 import java.io.*;
 import java.util.*;
